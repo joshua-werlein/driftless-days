@@ -1,0 +1,41 @@
+# Built outputs
+/build
+app/build
+**/build/
+
+# Gradle
+.gradle
+gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+.idea/caches
+.idea/libraries
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+# Local config — never commit
+local.properties
+keystore.properties
+
+# Signing keys — never commit
+*.jks
+*.keystore
+
+# Release artifacts
+*.apk
+*.aab
+
+# Native build
+.externalNativeBuild
+.cxx
+
+# macOS
+.DS_Store
+
+# Captures / profiling
+/captures
