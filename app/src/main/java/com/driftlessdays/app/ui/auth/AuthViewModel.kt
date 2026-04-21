@@ -1,21 +1,21 @@
 package com.driftlessdays.app.ui.auth
 
 import android.app.Activity
+import android.app.Application
+import android.content.Context
+import android.util.Log
+import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
-import android.content.Context
-import androidx.credentials.ClearCredentialStateRequest
-import androidx.credentials.exceptions.GetCredentialException
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import android.app.Application
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.driftlessdays.app.data.auth.CalendarAuthHelper
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import androidx.core.content.edit
 
 data class AuthUiState(
     val isSignedIn: Boolean = false,
@@ -77,10 +77,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         errorMessage = null
                     )
                 }
-            } catch (e: GetCredentialException) {
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "Sign in failed", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = "Sign in failed: ${e.message}"
+                    errorMessage = "Sign in failed: ${e.message ?: "Unknown error"}"
                 )
             }
         }
