@@ -159,23 +159,28 @@ class DriftlessWallpaperService : WallpaperService() {
             val bitmapAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
             val screenAspect = surfaceWidth.toFloat() / surfaceHeight.toFloat()
 
-            val scaledWidth: Float
-            val scaledHeight: Float
+            var scaledWidth: Float
+            var scaledHeight: Float
 
             if (bitmapAspect > screenAspect) {
-                // Bitmap is wider — fit height, crop sides
-                scaledHeight = surfaceHeight.toFloat()
-                scaledWidth = scaledHeight * bitmapAspect
+                // Bitmap is wider — constrain to parallax width, scale height proportionally
+                scaledWidth = surfaceWidth.toFloat() + (parallaxAmount * 2)
+                scaledHeight = scaledWidth / bitmapAspect
             } else {
                 // Bitmap is taller — fit width, crop top/bottom
                 scaledWidth = surfaceWidth.toFloat() + (parallaxAmount * 2)
                 scaledHeight = scaledWidth / bitmapAspect
             }
 
+            if (scaledHeight < surfaceHeight) {
+                scaledHeight = surfaceHeight.toFloat()
+                scaledWidth = scaledHeight * bitmapAspect
+            }
+
             // Parallax offset — shifts photo left/right based on home screen page
             val maxShift = scaledWidth - surfaceWidth
             val parallaxShift = if (parallaxEnabled) {
-                -(xOffset * maxShift.coerceAtMost(parallaxAmount * 2))
+                -(xOffset * maxShift)
             } else {
                 -(maxShift / 2)
             }
