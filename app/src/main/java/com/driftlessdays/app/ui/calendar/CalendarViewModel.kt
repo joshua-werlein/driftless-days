@@ -26,7 +26,6 @@ data class CalendarUiState(
     val currentView: CalendarView = CalendarView.MONTH,
     val monthPhoto: DailyPhoto? = null,
     val dayPhoto: DailyPhoto? = null,
-    val isPhotoLoading: Boolean = true,
     val events: List<CalendarEvent> = emptyList(),
     val isEventsLoading: Boolean = false,
     val eventsError: String? = null,
@@ -59,8 +58,7 @@ class CalendarViewModel(
         viewModelScope.launch {
             val photo = photoRepository.getPhotoForMonth(_uiState.value.currentMonth)
             _uiState.value = _uiState.value.copy(
-                monthPhoto = photo,
-                isPhotoLoading = false
+                monthPhoto = photo
             )
         }
     }

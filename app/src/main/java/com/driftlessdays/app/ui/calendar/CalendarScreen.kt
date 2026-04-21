@@ -27,7 +27,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.driftlessdays.app.data.remote.CalendarEvent
 import java.time.LocalDate
 import java.time.YearMonth
@@ -71,12 +73,18 @@ fun CalendarScreen(
             label = "photo_transition"
         ) { url ->
             if (url != null) {
-                AsyncImage(
+                SubcomposeAsyncImage(
                     model = url,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
-                )
+                ) {
+                    when (painter.state) {
+                        is AsyncImagePainter.State.Loading,
+                        is AsyncImagePainter.State.Error -> PhotoPlaceholder()
+                        else -> SubcomposeAsyncImageContent()
+                    }
+                }
             } else {
                 Box(modifier = Modifier
                     .fillMaxSize()
@@ -634,6 +642,24 @@ private fun PhotoSettingsSheet(
             }
         }
     }
+}
+
+@Composable
+private fun PhotoPlaceholder() {
+    val alpha by rememberInfiniteTransition(label = "shimmer").animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmer_alpha"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1A1A2E).copy(alpha = alpha))
+    )
 }
 
 @Composable
