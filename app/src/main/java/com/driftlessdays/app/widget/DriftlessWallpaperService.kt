@@ -47,6 +47,7 @@ class DriftlessWallpaperService : WallpaperService() {
         private var accelerometer: Sensor? = null
         private var filteredAccel = 0f
         private val accelAlpha = 0.85f
+        private val httpClient = OkHttpClient()
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
         private val drawRunnable = Runnable { draw() }
@@ -62,6 +63,7 @@ class DriftlessWallpaperService : WallpaperService() {
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
+            Log.d("DriftlessParallax", "onCreate isPreview=$isPreview")
             setTouchEventsEnabled(false)
             sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
             accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -116,6 +118,7 @@ class DriftlessWallpaperService : WallpaperService() {
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
+            Log.d("DriftlessParallax", "onVisibilityChanged visible=$visible isPreview=$isPreview photo=${photo != null}")
             if (visible) {
                 sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
                 draw()
@@ -127,45 +130,35 @@ class DriftlessWallpaperService : WallpaperService() {
         }
 
         private fun loadPhoto() {
+            Log.d("DriftlessParallax", "loadPhoto start isPreview=$isPreview")
             scope.launch(Dispatchers.IO) {
+                Log.d("DriftlessParallax", "loadPhoto IO block entered isPreview=$isPreview")
                 try {
                     val prefs = getSharedPreferences("driftless_prefs", MODE_PRIVATE)
                     parallaxEnabled = prefs.getBoolean("parallax_enabled", true)
                     val category = prefs.getString("photo_category", "nature") ?: "nature"
 
-                    // Check if cached photo is from today
                     val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-                    val cachedDate = prefs.getString("cached_photo_date", "")
-
-                    if (cachedDate == today) {
-                        // Use cached bitmap
-                        photo = WidgetPhotoLoader.loadBitmapFromCache(this@DriftlessWallpaperService)
+                    val url = "https://driftless-worker.jjwerlein.workers.dev/photo/$category/$today"
+                    Log.d("DriftlessParallax", "loadPhoto fetching $url")
+                    val request = Request.Builder().url(url).build()
+                    val response = httpClient.newCall(request).execute()
+                    Log.d("DriftlessParallax", "loadPhoto fetch response code=${response.code}")
+                    if (response.isSuccessful) {
+                        photo = response.body?.byteStream()?.let { BitmapFactory.decodeStream(it) }
                     } else {
-                        // Fetch new photo
-                        val url = "https://driftless-worker.jjwerlein.workers.dev/photo/$category/$today"
-                        val client = OkHttpClient()
-                        val request = Request.Builder().url(url).build()
-                        val response = client.newCall(request).execute()
-                        val bitmap = if (response.isSuccessful) {
-                            response.body?.byteStream()?.let { BitmapFactory.decodeStream(it) }
-                        } else {
-                            Log.e("DriftlessWallpaper", "Photo fetch failed: HTTP ${response.code} for $url")
-                            null
-                        }
-                        if (bitmap != null) {
-                            photo = bitmap
-                            WidgetPhotoLoader.saveBitmapToCache(
-                                this@DriftlessWallpaperService,
-                                bitmap
-                            )
-                            prefs.edit { putString("cached_photo_date", today) }
-                        }
+                        Log.e("DriftlessWallpaper", "Photo fetch failed: HTTP ${response.code} for $url")
                     }
+                    Log.d("DriftlessParallax", "loadPhoto fetch complete photo=${photo != null}")
 
+                    Log.d("DriftlessParallax", "loadPhoto complete isPreview=$isPreview photo=${photo != null}")
                     launch(Dispatchers.Main) { draw() }
 
                 } catch (e: Exception) {
                     Log.e("DriftlessWallpaper", "Failed to load photo", e)
+                    launch(Dispatchers.Main) { draw() }
+                } catch (t: Throwable) {
+                    Log.e("DriftlessWallpaper", "Throwable in loadPhoto", t)
                     launch(Dispatchers.Main) { draw() }
                 }
             }
@@ -185,10 +178,12 @@ class DriftlessWallpaperService : WallpaperService() {
         }
 
         private fun drawFrame(canvas: Canvas) {
+            Log.d("DriftlessParallax", "drawFrame photo=${photo != null} surfaceWidth=$surfaceWidth surfaceHeight=$surfaceHeight")
             // Fill background
             canvas.drawColor("#1A1A2E".toColorInt())
 
             val bitmap = photo ?: return
+            Log.d("DriftlessParallax", "drawFrame bitmap=${bitmap.width}x${bitmap.height} surface=${surfaceWidth}x${surfaceHeight}")
 
             // Scale bitmap to fill screen height
             val bitmapAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
