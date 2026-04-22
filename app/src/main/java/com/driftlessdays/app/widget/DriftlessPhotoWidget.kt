@@ -33,15 +33,28 @@ import androidx.glance.text.TextStyle
 import androidx.glance.color.ColorProvider
 import com.driftlessdays.app.MainActivity
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle as JTextStyle
 import java.util.Locale
 
 class DriftlessPhotoWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val bitmap = WidgetPhotoLoader.loadTodayPhoto()
-        if (bitmap != null) WidgetPhotoLoader.saveBitmapToCache(context, bitmap)
-        val cachedBitmap = WidgetPhotoLoader.loadBitmapFromCache(context)
-        provideContent { PhotoWidgetContent(cachedBitmap) }
+        val prefs = context.getSharedPreferences("driftless_prefs", Context.MODE_PRIVATE)
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val cachedDate = prefs.getString("widget_cached_photo_date", "")
+
+        val bitmap = if (cachedDate == today) {
+            WidgetPhotoLoader.loadBitmapFromCache(context)
+        } else {
+            val fetched = WidgetPhotoLoader.loadTodayPhoto()
+            if (fetched != null) {
+                WidgetPhotoLoader.saveBitmapToCache(context, fetched)
+                prefs.edit().putString("widget_cached_photo_date", today).apply()
+            }
+            fetched ?: WidgetPhotoLoader.loadBitmapFromCache(context)
+        }
+
+        provideContent { PhotoWidgetContent(bitmap) }
     }
 }
 

@@ -1,6 +1,11 @@
 package com.driftlessdays.app.widget
 
+import android.animation.ValueAnimator
 import android.graphics.Bitmap
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
@@ -9,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
+import android.view.animation.DecelerateInterpolator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,19 +41,37 @@ class DriftlessWallpaperService : WallpaperService() {
         private var surfaceHeight = 0
         private var xOffset = 0f
         private var parallaxEnabled = true
-        private val parallaxAmount = 60f
+        private var offsetAnimator: ValueAnimator? = null
+        private val parallaxAmount = 350f
+        private var sensorManager: SensorManager? = null
+        private var accelerometer: Sensor? = null
+        private var filteredAccel = 0f
+        private val accelAlpha = 0.85f
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
         private val drawRunnable = Runnable { draw() }
 
+        private val sensorListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (!parallaxEnabled) return
+                filteredAccel = accelAlpha * filteredAccel + (1f - accelAlpha) * event.values[0]
+                draw()
+            }
+            override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
+        }
+
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
             setTouchEventsEnabled(false)
+            sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+            accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
             loadPhoto()
         }
 
         override fun onDestroy() {
             super.onDestroy()
+            sensorManager?.unregisterListener(sensorListener)
+            offsetAnimator?.cancel()
             handler.removeCallbacks(drawRunnable)
             scope.cancel()
         }
@@ -76,17 +100,28 @@ class DriftlessWallpaperService : WallpaperService() {
             xPixelOffset: Int,
             yPixelOffset: Int
         ) {
+            Log.d("DriftlessParallax", "xOffset=$xOffset parallaxEnabled=$parallaxEnabled")
             if (parallaxEnabled) {
-                this.xOffset = xOffset
-                draw()
+                offsetAnimator?.cancel()
+                offsetAnimator = ValueAnimator.ofFloat(this.xOffset, xOffset).apply {
+                    duration = 300
+                    interpolator = DecelerateInterpolator()
+                    addUpdateListener {
+                        this@DriftlessWallpaperEngine.xOffset = it.animatedValue as Float
+                        draw()
+                    }
+                    start()
+                }
             }
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
             if (visible) {
+                sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
                 draw()
                 loadPhoto()
             } else {
+                sensorManager?.unregisterListener(sensorListener)
                 handler.removeCallbacks(drawRunnable)
             }
         }
@@ -175,15 +210,21 @@ class DriftlessWallpaperService : WallpaperService() {
             if (scaledHeight < surfaceHeight) {
                 scaledHeight = surfaceHeight.toFloat()
                 scaledWidth = scaledHeight * bitmapAspect
+                if (scaledWidth < surfaceWidth + parallaxAmount * 2) {
+                    scaledWidth = surfaceWidth + parallaxAmount * 2
+                    scaledHeight = scaledWidth / bitmapAspect
+                }
             }
 
-            // Parallax offset — shifts photo left/right based on home screen page
+            // Parallax offset — page-based + accelerometer tilt
             val maxShift = scaledWidth - surfaceWidth
-            val parallaxShift = if (parallaxEnabled) {
-                -(xOffset * maxShift)
+            val accelShift = -(filteredAccel / 5f).coerceIn(-1f, 1f) * (parallaxAmount * 0.4f)
+            val rawShift = if (parallaxEnabled) {
+                -(xOffset * maxShift) + accelShift
             } else {
                 -(maxShift / 2)
             }
+            val parallaxShift = rawShift.coerceIn(-maxShift, 0f)
 
             val top = (surfaceHeight - scaledHeight) / 2f
 

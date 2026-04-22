@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">Driftless Days</string>
-    <string name="widget_description">Wisconsin nature photo with date</string>
+    <string name="wallpaper_description">Wisconsin nature photo as a live wallpaper with parallax</string>
+    <string name="widget_photo_label">Driftless Days • Photo</string>
+    <string name="widget_photo_description">Wisconsin nature photo with today\'s date</string>
+    <string name="widget_photo_strip_label">Driftless Days • Photo Strip</string>
+    <string name="widget_photo_strip_description">Landscape photo with date, sized for a wide widget</string>
+    <string name="widget_calendar_label">Driftless Days • Calendar</string>
+    <string name="widget_calendar_description">Monthly calendar with photo header and your events</string>
 </resources>
