@@ -46,7 +46,11 @@ class DriftlessWallpaperService : WallpaperService() {
         private var sensorManager: SensorManager? = null
         private var accelerometer: Sensor? = null
         private var filteredAccel = 0f
+        private var filteredAccelY = 0f
+        private var gravityBaselineY = Float.MAX_VALUE
         private val accelAlpha = 0.85f
+        private var lastOffsetX = Float.MAX_VALUE
+        private var lastOffsetY = Float.MAX_VALUE
         private val httpClient = OkHttpClient()
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
@@ -55,7 +59,14 @@ class DriftlessWallpaperService : WallpaperService() {
         private val sensorListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 if (!parallaxEnabled) return
+                if (gravityBaselineY == Float.MAX_VALUE) { gravityBaselineY = event.values[1] }
                 filteredAccel = accelAlpha * filteredAccel + (1f - accelAlpha) * event.values[0]
+                filteredAccelY = accelAlpha * filteredAccelY + (1f - accelAlpha) * (event.values[1] - gravityBaselineY)
+                val newOffsetX = -(filteredAccel / 5f).coerceIn(-1f, 1f) * (parallaxAmount * 0.35f)
+                val newOffsetY = -(filteredAccelY / 3f).coerceIn(-1f, 1f) * (parallaxAmount * 0.35f)
+                if (kotlin.math.abs(newOffsetX - lastOffsetX) <= 1.5f && kotlin.math.abs(newOffsetY - lastOffsetY) <= 0.8f) return
+                lastOffsetX = newOffsetX
+                lastOffsetY = newOffsetY
                 draw()
             }
             override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
@@ -120,6 +131,9 @@ class DriftlessWallpaperService : WallpaperService() {
         override fun onVisibilityChanged(visible: Boolean) {
             Log.d("DriftlessParallax", "onVisibilityChanged visible=$visible isPreview=$isPreview photo=${photo != null}")
             if (visible) {
+                lastOffsetX = Float.MAX_VALUE
+                lastOffsetY = Float.MAX_VALUE
+                gravityBaselineY = Float.MAX_VALUE
                 sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
                 draw()
                 loadPhoto()
@@ -211,6 +225,13 @@ class DriftlessWallpaperService : WallpaperService() {
                 }
             }
 
+            if (parallaxEnabled) {
+                val verticalBudget = parallaxAmount * 0.35f * 2f
+                val overflowScale = (scaledHeight + verticalBudget) / scaledHeight
+                scaledWidth *= overflowScale
+                scaledHeight *= overflowScale
+            }
+
             // Parallax offset — page-based + accelerometer tilt
             val maxShift = scaledWidth - surfaceWidth
             val accelShift = -(filteredAccel / 5f).coerceIn(-1f, 1f) * (parallaxAmount * 0.4f)
@@ -221,7 +242,10 @@ class DriftlessWallpaperService : WallpaperService() {
             }
             val parallaxShift = rawShift.coerceIn(-maxShift, 0f)
 
-            val top = (surfaceHeight - scaledHeight) / 2f
+            val accelShiftY = -(filteredAccelY / 3f).coerceIn(-1f, 1f) * (parallaxAmount * 0.35f)
+            val maxVerticalShift = ((scaledHeight - surfaceHeight) / 2f).coerceAtLeast(0f)
+            val verticalShift = if (parallaxEnabled) accelShiftY.coerceIn(-maxVerticalShift, maxVerticalShift) else 0f
+            val top = (surfaceHeight - scaledHeight) / 2f + verticalShift
 
             val matrix = Matrix()
             matrix.setScale(scaledWidth / bitmap.width, scaledHeight / bitmap.height)
