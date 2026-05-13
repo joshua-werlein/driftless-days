@@ -11,7 +11,7 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 import android.view.animation.DecelerateInterpolator
@@ -34,7 +34,8 @@ class DriftlessWallpaperService : WallpaperService() {
 
     inner class DriftlessWallpaperEngine : Engine() {
 
-        private val handler = Handler(Looper.getMainLooper())
+        private val drawThread = HandlerThread("DriftlessDrawThread").also { it.start() }
+        private val drawHandler = Handler(drawThread.looper)
         private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         private var photo: Bitmap? = null
         private var surfaceWidth = 0
@@ -56,6 +57,7 @@ class DriftlessWallpaperService : WallpaperService() {
 
         private val drawRunnable = Runnable { draw() }
 
+        // Runs on drawThread (registered with drawHandler below)
         private val sensorListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 if (!parallaxEnabled) return
@@ -64,7 +66,7 @@ class DriftlessWallpaperService : WallpaperService() {
                 filteredAccelY = accelAlpha * filteredAccelY + (1f - accelAlpha) * (event.values[1] - gravityBaselineY)
                 val newOffsetX = -(filteredAccel / 5f).coerceIn(-1f, 1f) * (parallaxAmount * 0.35f)
                 val newOffsetY = -(filteredAccelY / 3f).coerceIn(-1f, 1f) * (parallaxAmount * 0.35f)
-                if (kotlin.math.abs(newOffsetX - lastOffsetX) <= 1.5f && kotlin.math.abs(newOffsetY - lastOffsetY) <= 0.8f) return
+                if (kotlin.math.abs(newOffsetX - lastOffsetX) <= 1.5f && kotlin.math.abs(newOffsetY - lastOffsetY) <= 2.5f) return
                 lastOffsetX = newOffsetX
                 lastOffsetY = newOffsetY
                 draw()
@@ -85,7 +87,8 @@ class DriftlessWallpaperService : WallpaperService() {
             super.onDestroy()
             sensorManager?.unregisterListener(sensorListener)
             offsetAnimator?.cancel()
-            handler.removeCallbacks(drawRunnable)
+            drawHandler.removeCallbacks(drawRunnable)
+            drawThread.quit()
             scope.cancel()
         }
 
@@ -97,12 +100,12 @@ class DriftlessWallpaperService : WallpaperService() {
         ) {
             surfaceWidth = width
             surfaceHeight = height
-            draw()
+            drawHandler.post(drawRunnable)
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
-            handler.removeCallbacks(drawRunnable)
+            drawHandler.removeCallbacks(drawRunnable)
         }
 
         override fun onOffsetsChanged(
@@ -115,13 +118,14 @@ class DriftlessWallpaperService : WallpaperService() {
         ) {
             Log.d("DriftlessParallax", "xOffset=$xOffset parallaxEnabled=$parallaxEnabled")
             if (parallaxEnabled) {
+                // ValueAnimator must run on main thread; it posts draw calls to drawHandler
                 offsetAnimator?.cancel()
                 offsetAnimator = ValueAnimator.ofFloat(this.xOffset, xOffset).apply {
                     duration = 300
                     interpolator = DecelerateInterpolator()
                     addUpdateListener {
                         this@DriftlessWallpaperEngine.xOffset = it.animatedValue as Float
-                        draw()
+                        drawHandler.post(drawRunnable)
                     }
                     start()
                 }
@@ -134,12 +138,13 @@ class DriftlessWallpaperService : WallpaperService() {
                 lastOffsetX = Float.MAX_VALUE
                 lastOffsetY = Float.MAX_VALUE
                 gravityBaselineY = Float.MAX_VALUE
-                sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
-                draw()
+                // Register with drawHandler so sensor callbacks run on the draw thread, not main thread
+                sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_GAME, drawHandler)
+                drawHandler.post(drawRunnable)
                 loadPhoto()
             } else {
                 sensorManager?.unregisterListener(sensorListener)
-                handler.removeCallbacks(drawRunnable)
+                drawHandler.removeCallbacks(drawRunnable)
             }
         }
 
@@ -166,14 +171,14 @@ class DriftlessWallpaperService : WallpaperService() {
                     Log.d("DriftlessParallax", "loadPhoto fetch complete photo=${photo != null}")
 
                     Log.d("DriftlessParallax", "loadPhoto complete isPreview=$isPreview photo=${photo != null}")
-                    launch(Dispatchers.Main) { draw() }
+                    drawHandler.post(drawRunnable)
 
                 } catch (e: Exception) {
                     Log.e("DriftlessWallpaper", "Failed to load photo", e)
-                    launch(Dispatchers.Main) { draw() }
+                    drawHandler.post(drawRunnable)
                 } catch (t: Throwable) {
                     Log.e("DriftlessWallpaper", "Throwable in loadPhoto", t)
-                    launch(Dispatchers.Main) { draw() }
+                    drawHandler.post(drawRunnable)
                 }
             }
         }
