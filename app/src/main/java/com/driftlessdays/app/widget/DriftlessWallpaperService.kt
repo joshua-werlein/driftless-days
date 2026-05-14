@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import android.util.Log
+import androidx.core.content.edit
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.time.LocalDate
@@ -154,7 +155,42 @@ class DriftlessWallpaperService : WallpaperService() {
             }
         }
 
+        private fun saveBitmapCache(bmp: Bitmap) {
+            try {
+                val file = java.io.File(cacheDir, "wallpaper_cache.jpg")
+                file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+                val prefs = getSharedPreferences("driftless_prefs", MODE_PRIVATE)
+                val category = prefs.getString("photo_category", "nature")
+                prefs.edit {
+                    putString("cache_date", LocalDate.now().toString())
+                    putString("cache_category", category)
+                }
+            } catch (e: Exception) {
+                Log.e("DriftlessWallpaper", "Cache save failed", e)
+            }
+        }
+
+        private fun loadBitmapCache(): Bitmap? {
+            return try {
+                val prefs = getSharedPreferences("driftless_prefs", MODE_PRIVATE)
+                val cacheDate = prefs.getString("cache_date", null)
+                val cacheCategory = prefs.getString("cache_category", null)
+                val today = LocalDate.now().toString()
+                val currentCategory = prefs.getString("photo_category", "nature")
+                val file = java.io.File(cacheDir, "wallpaper_cache.jpg")
+                if (cacheDate == today && cacheCategory == currentCategory && file.exists()) {
+                    BitmapFactory.decodeFile(file.absolutePath)
+                } else null
+            } catch (_: Exception) { null }
+        }
+
         private fun loadPhoto() {
+            val cached = loadBitmapCache()
+            if (cached != null) {
+                photo = cached
+                drawHandler.post(drawRunnable)
+            }
+
             Log.d("DriftlessParallax", "loadPhoto start isPreview=$isPreview")
             scope.launch(Dispatchers.IO) {
                 Log.d("DriftlessParallax", "loadPhoto IO block entered isPreview=$isPreview")
@@ -201,6 +237,7 @@ class DriftlessWallpaperService : WallpaperService() {
                             photo = if (!matrix.isIdentity)
                                 Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
                             else bmp
+                            photo?.let { saveBitmapCache(it) }
                         }
                     } else {
                         Log.e("DriftlessWallpaper", "Photo fetch failed: HTTP ${response.code} for $url")
