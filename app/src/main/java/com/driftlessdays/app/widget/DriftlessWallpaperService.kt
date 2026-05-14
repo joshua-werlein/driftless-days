@@ -26,6 +26,7 @@ import okhttp3.Request
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 
 class DriftlessWallpaperService : WallpaperService() {
 
@@ -165,7 +166,17 @@ class DriftlessWallpaperService : WallpaperService() {
                         "seasons_calendar" -> "seasons/${getAstronomicalSeason()}"
                         else -> category
                     }
-
+                    // Personal — load from local URI, skip network
+                    if (effectiveCategory == "personal") {
+                        val uriString = prefs.getString("personal_photo_uri", null)
+                        if (uriString != null) {
+                            val uri = uriString.toUri()
+                            photo = contentResolver.openInputStream(uri)
+                                ?.let { BitmapFactory.decodeStream(it) }
+                        }
+                        drawHandler.post(drawRunnable)
+                        return@launch
+                    }
                     val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
                     val url = "https://driftless-worker.jjwerlein.workers.dev/photo/$effectiveCategory/$today"
                     Log.d("DriftlessParallax", "loadPhoto fetching $url")

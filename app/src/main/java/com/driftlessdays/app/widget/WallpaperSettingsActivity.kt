@@ -1,8 +1,11 @@
 package com.driftlessdays.app.widget
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.driftlessdays.app.ui.theme.DriftlessDaysTheme
 import androidx.core.content.edit
+import androidx.activity.result.PickVisualMediaRequest
 
 class WallpaperSettingsActivity : ComponentActivity() {
 
@@ -34,6 +38,21 @@ class WallpaperSettingsActivity : ComponentActivity() {
                     mutableStateOf(prefs.getString("photo_category", "nature") ?: "nature")
                 }
 
+                // Photo picker — no permissions needed (Android Photo Picker API)
+                val photoPicker = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri: Uri? ->
+                    if (uri != null) {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                        prefs.edit { putString("personal_photo_uri", uri.toString()) }
+                        selectedCategory = "personal"
+                        prefs.edit { putString("photo_category", "personal") }
+                    }
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -43,7 +62,6 @@ class WallpaperSettingsActivity : ComponentActivity() {
                 ) {
                     Spacer(modifier = Modifier.height(48.dp))
 
-                    // DD badge + title
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             contentAlignment = Alignment.Center,
@@ -76,7 +94,6 @@ class WallpaperSettingsActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(40.dp))
 
-                    // Parallax toggle
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF16213E)),
                         shape = RoundedCornerShape(12.dp)
@@ -117,7 +134,6 @@ class WallpaperSettingsActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // --- Base categories ---
                     Text(
                         text = "Photo category",
                         fontSize = 13.sp,
@@ -142,9 +158,20 @@ class WallpaperSettingsActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    CategoryCard(
+                        label = "Personal",
+                        subtitle = if (selectedCategory == "personal") "Tap to change photo"
+                        else "Choose a photo from your gallery",
+                        selected = selectedCategory == "personal",
+                        onClick = {
+                            photoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        }
+                    )
 
-                    // --- Seasons section ---
+                    Spacer(modifier = Modifier.height(24.dp))
+
                     Text(
                         text = "Seasons",
                         fontSize = 13.sp,
@@ -175,7 +202,6 @@ class WallpaperSettingsActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // --- Calendar widget ---
                     Text(
                         text = "Calendar widget",
                         fontSize = 13.sp,
