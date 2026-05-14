@@ -5,7 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ class WallpaperSettingsActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(Color(0xFF1A1A2E))
                         .padding(24.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     Spacer(modifier = Modifier.height(48.dp))
 
@@ -75,9 +78,7 @@ class WallpaperSettingsActivity : ComponentActivity() {
 
                     // Parallax toggle
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF16213E)
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF16213E)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
@@ -104,9 +105,7 @@ class WallpaperSettingsActivity : ComponentActivity() {
                                 checked = parallaxEnabled,
                                 onCheckedChange = { enabled ->
                                     parallaxEnabled = enabled
-                                    prefs.edit {
-                                        putBoolean("parallax_enabled", enabled)
-                                    }
+                                    prefs.edit { putBoolean("parallax_enabled", enabled) }
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
@@ -116,9 +115,9 @@ class WallpaperSettingsActivity : ComponentActivity() {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    // Category selection
+                    // --- Base categories ---
                     Text(
                         text = "Photo category",
                         fontSize = 13.sp,
@@ -127,57 +126,56 @@ class WallpaperSettingsActivity : ComponentActivity() {
                     )
 
                     listOf(
-                        "nature" to "Nature",
-                        "seasons" to "Seasons",
-                        "minimal" to "Minimal"
+                        "nature"   to "Nature",
+                        "panorama" to "Panorama",
+                        "minimal"  to "Minimal"
                     ).forEach { (id, label) ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (selectedCategory == id)
-                                    Color(0xFF3C3489).copy(alpha = 0.6f)
-                                else Color(0xFF16213E)
-                            ),
-                            shape = RoundedCornerShape(10.dp),
+                        CategoryCard(
+                            label = label,
+                            subtitle = null,
+                            selected = selectedCategory == id,
                             onClick = {
                                 selectedCategory = id
-                                prefs.edit {
-                                    putString("photo_category", id)
-                                }
+                                prefs.edit { putString("photo_category", id) }
                             }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 15.sp,
-                                    color = Color.White,
-                                    fontWeight = if (selectedCategory == id)
-                                        FontWeight.Bold else FontWeight.Normal
-                                )
-                                if (selectedCategory == id) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .background(
-                                                Color(0xFFEF9F27),
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                    )
-                                }
-                            }
-                        }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // --- Seasons section ---
+                    Text(
+                        text = "Seasons",
+                        fontSize = 13.sp,
+                        color = Color(0xFF5F5E5A),
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+
+                    listOf(
+                        "seasons"          to Pair("Auto", "Switches by current month"),
+                        "seasons_calendar" to Pair("Follow Calendar", "Switches on astronomical start dates"),
+                        "seasons/spring"   to Pair("Spring", "Always show spring photos"),
+                        "seasons/summer"   to Pair("Summer", "Always show summer photos"),
+                        "seasons/fall"     to Pair("Fall", "Always show fall photos"),
+                        "seasons/winter"   to Pair("Winter", "Always show winter photos")
+                    ).forEach { (id, pair) ->
+                        val (label, subtitle) = pair
+                        CategoryCard(
+                            label = label,
+                            subtitle = subtitle,
+                            selected = selectedCategory == id,
+                            onClick = {
+                                selectedCategory = id
+                                prefs.edit { putString("photo_category", id) }
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // --- Calendar widget ---
                     Text(
                         text = "Calendar widget",
                         fontSize = 13.sp,
@@ -186,9 +184,7 @@ class WallpaperSettingsActivity : ComponentActivity() {
                     )
 
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF16213E)
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF16213E)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
@@ -218,9 +214,7 @@ class WallpaperSettingsActivity : ComponentActivity() {
                                 checked = widgetTransparent,
                                 onCheckedChange = { enabled ->
                                     widgetTransparent = enabled
-                                    prefs.edit {
-                                        putBoolean("widget_transparent", enabled)
-                                    }
+                                    prefs.edit { putBoolean("widget_transparent", enabled) }
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
@@ -229,7 +223,59 @@ class WallpaperSettingsActivity : ComponentActivity() {
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(32.dp))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryCard(
+    label: String,
+    subtitle: String?,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected)
+                Color(0xFF3C3489).copy(alpha = 0.6f)
+            else Color(0xFF16213E)
+        ),
+        shape = RoundedCornerShape(10.dp),
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = label,
+                    fontSize = 15.sp,
+                    color = Color.White,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        fontSize = 12.sp,
+                        color = Color(0xFF5F5E5A)
+                    )
+                }
+            }
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(Color(0xFFEF9F27), RoundedCornerShape(4.dp))
+                )
             }
         }
     }

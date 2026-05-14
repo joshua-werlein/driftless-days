@@ -26,7 +26,6 @@ import okhttp3.Request
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import androidx.core.graphics.toColorInt
-import androidx.core.content.edit
 
 class DriftlessWallpaperService : WallpaperService() {
 
@@ -60,6 +59,12 @@ class DriftlessWallpaperService : WallpaperService() {
         // Runs on drawThread (registered with drawHandler below)
         private val sensorListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
+                val magnitude = kotlin.math.sqrt(
+                    event.values[0] * event.values[0] +
+                            event.values[1] * event.values[1] +
+                            event.values[2] * event.values[2]
+                )
+                if (kotlin.math.abs(magnitude - SensorManager.GRAVITY_EARTH) < 0.8f) return
                 if (!parallaxEnabled) return
                 if (gravityBaselineY == Float.MAX_VALUE) { gravityBaselineY = event.values[1] }
                 filteredAccel = accelAlpha * filteredAccel + (1f - accelAlpha) * event.values[0]
@@ -156,15 +161,36 @@ class DriftlessWallpaperService : WallpaperService() {
                     val prefs = getSharedPreferences("driftless_prefs", MODE_PRIVATE)
                     parallaxEnabled = prefs.getBoolean("parallax_enabled", true)
                     val category = prefs.getString("photo_category", "nature") ?: "nature"
+                    val effectiveCategory = when (category) {
+                        "seasons_calendar" -> "seasons/${getAstronomicalSeason()}"
+                        else -> category
+                    }
 
                     val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-                    val url = "https://driftless-worker.jjwerlein.workers.dev/photo/$category/$today"
+                    val url = "https://driftless-worker.jjwerlein.workers.dev/photo/$effectiveCategory/$today"
                     Log.d("DriftlessParallax", "loadPhoto fetching $url")
                     val request = Request.Builder().url(url).build()
                     val response = httpClient.newCall(request).execute()
                     Log.d("DriftlessParallax", "loadPhoto fetch response code=${response.code}")
                     if (response.isSuccessful) {
-                        photo = response.body?.byteStream()?.let { BitmapFactory.decodeStream(it) }
+                        val bytes = response.body?.bytes()
+                        if (bytes != null) {
+                            val exif = androidx.exifinterface.media.ExifInterface(bytes.inputStream())
+                            val orientation = exif.getAttributeInt(
+                                androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                                androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+                            )
+                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            val matrix = Matrix()
+                            when (orientation) {
+                                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
+                                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                            }
+                            photo = if (!matrix.isIdentity)
+                                Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+                            else bmp
+                        }
                     } else {
                         Log.e("DriftlessWallpaper", "Photo fetch failed: HTTP ${response.code} for $url")
                     }
@@ -180,6 +206,19 @@ class DriftlessWallpaperService : WallpaperService() {
                     Log.e("DriftlessWallpaper", "Throwable in loadPhoto", t)
                     drawHandler.post(drawRunnable)
                 }
+            }
+        }
+
+        private fun getAstronomicalSeason(): String {
+            val d = LocalDate.now()
+            val m = d.monthValue
+            val day = d.dayOfMonth
+            @Suppress("KotlinConstantConditions")
+            return when {
+                (m == 3 && day >= 20) || (m == 4) || (m == 5) || (m == 6 && day < 21) -> "spring"
+                (m == 6 && day >= 21) || (m == 7) || (m == 8) || (m == 9 && day < 22) -> "summer"
+                (m == 9 && day >= 22) || (m == 10) || (m == 11) || (m == 12 && day < 21) -> "fall"
+                else -> "winter"
             }
         }
 

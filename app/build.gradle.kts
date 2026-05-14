@@ -96,4 +96,5 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
     implementation(libs.okhttp)
+    implementation(libs.androidx.exifinterface)
 }
