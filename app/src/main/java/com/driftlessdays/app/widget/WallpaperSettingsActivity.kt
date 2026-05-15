@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.sp
 import com.driftlessdays.app.ui.theme.DriftlessDaysTheme
 import androidx.core.content.edit
 import androidx.activity.result.PickVisualMediaRequest
+import android.app.WallpaperManager
+import android.content.ComponentName
+import android.content.Intent
 
 class WallpaperSettingsActivity : ComponentActivity() {
 
@@ -45,7 +48,7 @@ class WallpaperSettingsActivity : ComponentActivity() {
                     if (uri != null) {
                         contentResolver.takePersistableUriPermission(
                             uri,
-                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
                         )
                         prefs.edit { putString("personal_photo_uri", uri.toString()) }
                         selectedCategory = "personal"
@@ -248,6 +251,35 @@ class WallpaperSettingsActivity : ComponentActivity() {
                                 )
                             )
                         }
+                    }
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                                putExtra(
+                                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                                    ComponentName(
+                                        "com.driftlessdays.app",
+                                        "com.driftlessdays.app.widget.DriftlessWallpaperService"
+                                    )
+                                )
+                            }
+                            startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF3C3489)
+                        )
+                    ) {
+                        Text(
+                            text = "Set as Wallpaper",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
